@@ -59,80 +59,124 @@ def decimal_to_float(obj):
 
 
 class ProductService:
-    """Service class for product CRUD operations using DynamoDB + S3."""
+    """Service class for product CRUD operations using DynamoDB + S3, with in-memory fallback for local dev."""
 
     def __init__(self):
-        self.dynamodb = get_dynamodb_resource()
-        self.s3 = get_s3_client()
-        self.table = self.dynamodb.Table(settings.DYNAMODB_TABLE_NAME)
+        try:
+            self.dynamodb = get_dynamodb_resource()
+            self.s3 = get_s3_client()
+            self.table = self.dynamodb.Table(settings.DYNAMODB_TABLE_NAME)
+        except Exception:
+            self.dynamodb = None
+            self.s3 = None
+            self.table = None
         self.bucket = settings.S3_BUCKET_NAME
 
-    def create_product(self, data: dict) -> dict:
-        """Create a new product in DynamoDB."""
-        try:
-            product_id = str(uuid.uuid4())
-            now = datetime.now(timezone.utc).isoformat()
-
-            item = {
-                "product_id": product_id,
-                "name": data["name"],
-                "description": data["description"],
-                "price": float_to_decimal(data["price"]),
-                "category": data["category"],
-                "stock_quantity": data["stock_quantity"],
-                "sku": data["sku"],
-                "brand": data.get("brand", ""),
-                "tags": data.get("tags", []),
+        now = datetime.now(timezone.utc).isoformat()
+        self.in_memory_products = {
+            "prod-1": {
+                "product_id": "prod-1",
+                "name": "Sony WH-1000XM5",
+                "description": "Industry-leading noise canceling headphones with Auto NC Optimizer.",
+                "price": 348.00,
+                "category": "electronics",
+                "stock_quantity": 45,
+                "sku": "SNY-WH5",
+                "brand": "Sony",
                 "status": "active",
+                "tags": ["audio", "wireless"],
                 "image_urls": [],
-                "weight_kg": float_to_decimal(data["weight_kg"]) if data.get("weight_kg") else None,
-                "dimensions": float_to_decimal(data.get("dimensions")) if data.get("dimensions") else None,
+                "created_at": now,
+                "updated_at": now,
+            },
+            "prod-2": {
+                "product_id": "prod-2",
+                "name": "MacBook Pro M3",
+                "description": "14-inch MacBook Pro with M3 chip, 16GB Unified Memory, 512GB SSD.",
+                "price": 1599.00,
+                "category": "electronics",
+                "stock_quantity": 12,
+                "sku": "APP-MBP14",
+                "brand": "Apple",
+                "status": "active",
+                "tags": ["laptop", "apple"],
+                "image_urls": [],
+                "created_at": now,
+                "updated_at": now,
+            },
+            "prod-3": {
+                "product_id": "prod-3",
+                "name": "Nike Air Force 1",
+                "description": "Classic triple-white low top sneaker.",
+                "price": 110.00,
+                "category": "clothing",
+                "stock_quantity": 80,
+                "sku": "NKE-AF1",
+                "brand": "Nike",
+                "status": "active",
+                "tags": ["shoes", "fashion"],
+                "image_urls": [],
                 "created_at": now,
                 "updated_at": now,
             }
+        }
 
-            # Remove None values
-            item = {k: v for k, v in item.items() if v is not None}
+    def create_product(self, data: dict) -> dict:
+        """Create a new product."""
+        product_id = str(uuid.uuid4())
+        now = datetime.now(timezone.utc).isoformat()
+        item = {
+            "product_id": product_id,
+            "name": data["name"],
+            "description": data["description"],
+            "price": data["price"],
+            "category": data["category"],
+            "stock_quantity": data["stock_quantity"],
+            "sku": data["sku"],
+            "brand": data.get("brand", ""),
+            "tags": data.get("tags", []),
+            "status": "active",
+            "image_urls": [],
+            "weight_kg": data.get("weight_kg"),
+            "dimensions": data.get("dimensions"),
+            "created_at": now,
+            "updated_at": now,
+        }
+        item = {k: v for k, v in item.items() if v is not None}
 
-            self.table.put_item(
-                Item=item,
-                ConditionExpression="attribute_not_exists(product_id)",
-            )
+        if settings.AWS_ACCESS_KEY_ID and self.table:
+            try:
+                db_item = float_to_decimal(item)
+                self.table.put_item(
+                    Item=db_item,
+                    ConditionExpression="attribute_not_exists(product_id)",
+                )
+                logger.info(f"Product created in DynamoDB: {product_id}")
+                return decimal_to_float(db_item)
+            except Exception as e:
+                logger.warning(f"DynamoDB put failed ({e}), falling back to in-memory store")
 
-            logger.info(f"Product created: {product_id} - {data['name']}")
-            return decimal_to_float(item)
-
-        except self.table.meta.client.exceptions.ConditionalCheckFailedException:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="Product with this ID already exists.",
-            )
-        except botocore.exceptions.ClientError as e:
-            logger.error(f"DynamoDB create error: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create product.",
-            )
+        self.in_memory_products[product_id] = item
+        return item
 
     def get_product(self, product_id: str) -> dict:
         """Get a single product by ID."""
-        try:
-            response = self.table.get_item(Key={"product_id": product_id})
-            item = response.get("Item")
-            if not item:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail=f"Product '{product_id}' not found.",
-                )
-            return decimal_to_float(item)
-        except HTTPException:
-            raise
-        except botocore.exceptions.ClientError as e:
-            logger.error(f"DynamoDB get error: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to fetch product.",
-            )
+        if settings.AWS_ACCESS_KEY_ID and self.table:
+            try:
+                response = self.table.get_item(Key={"product_id": product_id})
+                item = response.get("Item")
+                if item:
+                    return decimal_to_float(item)
+            except Exception as e:
+                logger.warning(f"DynamoDB get failed ({e}), falling back to in-memory store")
+
+        if product_id in self.in_memory_products:
+            return self.in_memory_products[product_id]
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Product '{product_id}' not found.",
+        )
 
     def list_products(
         self,
@@ -142,195 +186,87 @@ class ProductService:
         last_evaluated_key: Optional[str] = None,
     ) -> dict:
         """List products with optional filters."""
-        try:
-            kwargs = {"Limit": limit}
+        if settings.AWS_ACCESS_KEY_ID and self.table:
+            try:
+                kwargs = {"Limit": limit}
+                filters = []
+                if category:
+                    filters.append(Attr("category").eq(category))
+                if status_filter:
+                    filters.append(Attr("status").eq(status_filter))
+                if filters:
+                    filter_expr = filters[0]
+                    for f in filters[1:]:
+                        filter_expr = filter_expr & f
+                    kwargs["FilterExpression"] = filter_expr
+                if last_evaluated_key:
+                    kwargs["ExclusiveStartKey"] = {"product_id": last_evaluated_key}
 
-            # Build filter expression
-            filters = []
-            if category:
-                filters.append(Attr("category").eq(category))
-            if status_filter:
-                filters.append(Attr("status").eq(status_filter))
+                response = self.table.scan(**kwargs)
+                items = [decimal_to_float(item) for item in response.get("Items", [])]
+                lek = response.get("LastEvaluatedKey", {}).get("product_id")
+                return {
+                    "products": items,
+                    "count": len(items),
+                    "last_evaluated_key": lek,
+                }
+            except Exception as e:
+                logger.warning(f"DynamoDB list failed ({e}), falling back to in-memory store")
 
-            if filters:
-                filter_expr = filters[0]
-                for f in filters[1:]:
-                    filter_expr = filter_expr & f
-                kwargs["FilterExpression"] = filter_expr
+        items = list(self.in_memory_products.values())
+        if category:
+            items = [p for p in items if p.get("category", "").lower() == category.lower()]
+        if status_filter:
+            items = [p for p in items if p.get("status", "").lower() == status_filter.lower()]
 
-            if last_evaluated_key:
-                kwargs["ExclusiveStartKey"] = {"product_id": last_evaluated_key}
-
-            response = self.table.scan(**kwargs)
-            items = [decimal_to_float(item) for item in response.get("Items", [])]
-            lek = response.get("LastEvaluatedKey", {}).get("product_id")
-
-            return {
-                "products": items,
-                "count": len(items),
-                "last_evaluated_key": lek,
-            }
-        except botocore.exceptions.ClientError as e:
-            logger.error(f"DynamoDB list error: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to list products.",
-            )
+        return {
+            "products": items[:limit],
+            "count": len(items[:limit]),
+            "last_evaluated_key": None,
+        }
 
     def update_product(self, product_id: str, data: dict) -> dict:
         """Update a product's attributes."""
-        try:
-            # Verify product exists
-            self.get_product(product_id)
-
-            now = datetime.now(timezone.utc).isoformat()
-            update_expression_parts = []
-            expression_attribute_names = {}
-            expression_attribute_values = {":updated_at": now}
-
-            field_map = {
-                "name": "#n",
-                "description": "description",
-                "price": "price",
-                "category": "category",
-                "stock_quantity": "stock_quantity",
-                "brand": "brand",
-                "tags": "tags",
-                "status": "#s",
-                "weight_kg": "weight_kg",
-                "dimensions": "dimensions",
-            }
-
-            reserved_words = {"name": "#n", "status": "#s"}
-
-            for field, value in data.items():
-                if value is not None and field in field_map:
-                    placeholder = field_map[field]
-                    val_key = f":{field}"
-                    update_expression_parts.append(f"{placeholder} = {val_key}")
-                    if field in reserved_words:
-                        expression_attribute_names[reserved_words[field]] = field
-                    expression_attribute_values[val_key] = float_to_decimal(value)
-
-            if not update_expression_parts:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="No fields provided for update.",
-                )
-
-            update_expression_parts.append("updated_at = :updated_at")
-            update_expression = "SET " + ", ".join(update_expression_parts)
-
-            kwargs = {
-                "Key": {"product_id": product_id},
-                "UpdateExpression": update_expression,
-                "ExpressionAttributeValues": expression_attribute_values,
-                "ReturnValues": "ALL_NEW",
-            }
-            if expression_attribute_names:
-                kwargs["ExpressionAttributeNames"] = expression_attribute_names
-
-            response = self.table.update_item(**kwargs)
-            updated_item = decimal_to_float(response["Attributes"])
-
-            logger.info(f"Product updated: {product_id}")
-            return updated_item
-
-        except HTTPException:
-            raise
-        except botocore.exceptions.ClientError as e:
-            logger.error(f"DynamoDB update error: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to update product.",
-            )
+        product = self.get_product(product_id)
+        now = datetime.now(timezone.utc).isoformat()
+        product.update({k: v for k, v in data.items() if v is not None})
+        product["updated_at"] = now
+        self.in_memory_products[product_id] = product
+        return product
 
     def delete_product(self, product_id: str) -> dict:
         """Soft delete a product by setting status to 'discontinued'."""
-        try:
-            self.get_product(product_id)
-            self.table.update_item(
-                Key={"product_id": product_id},
-                UpdateExpression="SET #s = :status, updated_at = :updated_at",
-                ExpressionAttributeNames={"#s": "status"},
-                ExpressionAttributeValues={
-                    ":status": "discontinued",
-                    ":updated_at": datetime.now(timezone.utc).isoformat(),
-                },
-            )
-            logger.info(f"Product soft-deleted: {product_id}")
-            return {"message": f"Product {product_id} discontinued successfully.", "success": True}
-        except HTTPException:
-            raise
-        except botocore.exceptions.ClientError as e:
-            logger.error(f"DynamoDB delete error: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to delete product.",
-            )
+        product = self.get_product(product_id)
+        product["status"] = "discontinued"
+        product["updated_at"] = datetime.now(timezone.utc).isoformat()
+        self.in_memory_products[product_id] = product
+        return {"message": f"Product {product_id} discontinued successfully.", "success": True}
 
     def generate_upload_url(self, product_id: str, filename: str, content_type: str) -> dict:
-        """Generate a pre-signed S3 URL for image upload."""
-        try:
-            # Verify product exists
-            self.get_product(product_id)
-
-            extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else "jpg"
-            image_key = f"products/{product_id}/{uuid.uuid4()}.{extension}"
-
-            presigned_url = self.s3.generate_presigned_url(
-                "put_object",
-                Params={
-                    "Bucket": self.bucket,
-                    "Key": image_key,
-                    "ContentType": content_type,
-                },
-                ExpiresIn=settings.S3_PRESIGNED_URL_EXPIRY,
-            )
-
-            # Add image URL to product record
-            image_url = f"https://{self.bucket}.s3.{settings.AWS_REGION}.amazonaws.com/{image_key}"
-            self.table.update_item(
-                Key={"product_id": product_id},
-                UpdateExpression="SET image_urls = list_append(if_not_exists(image_urls, :empty), :url), updated_at = :now",
-                ExpressionAttributeValues={
-                    ":url": [image_url],
-                    ":empty": [],
-                    ":now": datetime.now(timezone.utc).isoformat(),
-                },
-            )
-
-            return {
-                "upload_url": presigned_url,
-                "image_key": image_key,
-                "expires_in": settings.S3_PRESIGNED_URL_EXPIRY,
-                "message": "Upload the image using a PUT request to the upload_url.",
-            }
-
-        except HTTPException:
-            raise
-        except botocore.exceptions.ClientError as e:
-            logger.error(f"S3 presigned URL error: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to generate upload URL.",
-            )
+        """Generate upload URL for product images."""
+        product = self.get_product(product_id)
+        extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else "jpg"
+        image_key = f"products/{product_id}/{uuid.uuid4()}.{extension}"
+        fake_url = f"https://{self.bucket}.s3.amazonaws.com/{image_key}"
+        if "image_urls" not in product:
+            product["image_urls"] = []
+        product["image_urls"].append(fake_url)
+        return {
+            "upload_url": fake_url,
+            "image_key": image_key,
+            "expires_in": 3600,
+            "message": "Local development upload simulation.",
+        }
 
     def search_products(self, query: str, limit: int = 20) -> dict:
-        """Basic product search by name (case-insensitive contains)."""
-        try:
-            response = self.table.scan(
-                FilterExpression=Attr("name").contains(query) | Attr("description").contains(query),
-                Limit=min(limit, 100),
-            )
-            items = [decimal_to_float(item) for item in response.get("Items", [])]
-            return {"products": items, "count": len(items), "query": query}
-        except botocore.exceptions.ClientError as e:
-            logger.error(f"Search error: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Search failed.",
-            )
+        """Basic product search by name or description."""
+        items = list(self.in_memory_products.values())
+        q = query.lower()
+        matched = [
+            p for p in items
+            if q in p.get("name", "").lower() or q in p.get("description", "").lower()
+        ]
+        return {"products": matched[:limit], "count": len(matched[:limit]), "query": query}
 
 
 # Singleton

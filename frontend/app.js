@@ -5,9 +5,9 @@
 
 // Configuration for Backend Services
 const CONFIG = {
-  USER_SERVICE: 'http://localhost:8001/api/v1',
-  PRODUCT_SERVICE: 'http://localhost:8002/api/v1',
-  ORDER_SERVICE: 'http://localhost:8003/api/v1'
+  USER_SERVICE: 'http://k8s-ecommerc-ecommerc-7ba9b551d1-216629860.us-east-1.elb.amazonaws.com/api/v1',
+  PRODUCT_SERVICE: 'http://k8s-ecommerc-ecommerc-7ba9b551d1-216629860.us-east-1.elb.amazonaws.com/api/v1',
+  ORDER_SERVICE: 'http://k8s-ecommerc-ecommerc-7ba9b551d1-216629860.us-east-1.elb.amazonaws.com/api/v1'
 };
 
 // State

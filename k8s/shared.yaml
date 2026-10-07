@@ -36,9 +36,9 @@ metadata:
   namespace: ecommerce
 type: Opaque
 data:
-  COGNITO_USER_POOL_ID: <BASE64_ENCODED_VALUE>
-  COGNITO_CLIENT_ID: <BASE64_ENCODED_VALUE>
-  COGNITO_CLIENT_SECRET: <BASE64_ENCODED_VALUE>
+  COGNITO_USER_POOL_ID: dXMtZWFzdC0xXzZEZ3I0bFl6Rg==
+  COGNITO_CLIENT_ID: NmVtMHN1bXBtbTk1aWV2YWhoYjhqMTJ1bm4=
+  COGNITO_CLIENT_SECRET: MThtMzl0c2NqdXR0MHI2cDRkOXBzOWZkOW81NmVybTdkZzdoaWJwdjVwbDMzYmFwZHFkMA==
 
 ---
 # ── ServiceAccount: User Service (IRSA) ───────────────────────────
@@ -49,7 +49,7 @@ metadata:
   name: user-service-sa
   namespace: ecommerce
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::<AWS_ACCOUNT_ID>:role/user-service-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::699037166170:role/user-service-role
 
 ---
 # ── ServiceAccount: Product Service (IRSA) ────────────────────────
@@ -60,7 +60,7 @@ metadata:
   name: product-service-sa
   namespace: ecommerce
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::<AWS_ACCOUNT_ID>:role/product-service-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::699037166170:role/product-service-role
 
 ---
 # ── ServiceAccount: Order Service (IRSA) ──────────────────────────
@@ -71,4 +71,4 @@ metadata:
   name: order-service-sa
   namespace: ecommerce
   annotations:
-    eks.amazonaws.com/role-arn: arn:aws:iam::<AWS_ACCOUNT_ID>:role/order-service-role
+    eks.amazonaws.com/role-arn: arn:aws:iam::699037166170:role/order-service-role

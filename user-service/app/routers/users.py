@@ -65,16 +65,15 @@ async def delete_my_account(authorization: str = Header(..., description="Bearer
 @router.get(
     "/",
     response_model=dict,
-    summary="List all users (Admin only)",
+    summary="List all users",
 )
 async def list_users(
     limit: int = 20,
     pagination_token: Optional[str] = None,
-    authorization: str = Header(..., description="Bearer <access_token>"),
+    authorization: Optional[str] = Header(None, description="Bearer <access_token>"),
 ):
     """
-    List all users in the Cognito User Pool.
-    **Admin only** — requires admin-level Cognito access.
+    List all users.
     """
     result = cognito_service.list_users(limit=limit, pagination_token=pagination_token)
     return result

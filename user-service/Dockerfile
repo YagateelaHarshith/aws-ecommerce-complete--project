@@ -24,6 +24,8 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # ── Stage 2: Runtime ──────────────────────────────────────────────
 FROM python:3.11-slim AS runtime
 
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 # Security: run as non-root user
 RUN groupadd --gid 1001 appgroup && \
     useradd --uid 1001 --gid appgroup --shell /bin/bash --create-home appuser

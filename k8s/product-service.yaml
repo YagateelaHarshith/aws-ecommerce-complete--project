@@ -25,7 +25,7 @@ spec:
       serviceAccountName: product-service-sa  # For IRSA
       containers:
         - name: product-service
-          image: <AWS_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/product-service:latest
+          image: 699037166170.dkr.ecr.us-east-1.amazonaws.com/product-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8002
@@ -108,7 +108,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: product-service
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 10
   metrics:
     - type: Resource

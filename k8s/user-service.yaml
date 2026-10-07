@@ -26,7 +26,7 @@ spec:
       serviceAccountName: user-service-sa  # For IRSA (IAM Roles for Service Accounts)
       containers:
         - name: user-service
-          image: <AWS_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/user-service:latest
+          image: 699037166170.dkr.ecr.us-east-1.amazonaws.com/user-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8001
@@ -113,7 +113,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: user-service
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 10
   metrics:
     - type: Resource

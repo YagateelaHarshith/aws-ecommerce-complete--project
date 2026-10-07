@@ -25,7 +25,7 @@ spec:
       serviceAccountName: order-service-sa  # For IRSA
       containers:
         - name: order-service
-          image: <AWS_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/order-service:latest
+          image: 699037166170.dkr.ecr.us-east-1.amazonaws.com/order-service:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8003
@@ -105,7 +105,7 @@ spec:
     apiVersion: apps/v1
     kind: Deployment
     name: order-service
-  minReplicas: 2
+  minReplicas: 1
   maxReplicas: 10
   metrics:
     - type: Resource

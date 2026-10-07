@@ -65,6 +65,10 @@ resource "aws_cognito_user_pool" "pool" {
     require_symbols   = true
     require_uppercase = true
   }
+
+  lifecycle {
+    ignore_changes = [schema]
+  }
 }
 
 resource "aws_cognito_user_pool_client" "client" {
